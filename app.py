@@ -1,5 +1,5 @@
 import streamlit as st
-import tensorflow as tf
+import keras                    # ✅ import keras directly
 from PIL import Image
 import numpy as np
 import requests
@@ -7,7 +7,7 @@ import os
 
 st.set_page_config(page_title="X-Ray Classification Hub", layout="centered")
 st.title("🩻 Chest X-Ray Diagnostic Classifier")
-st.write("Upload a patient's chest X-ray image to identify features pointing to Normal, COVID-19, or Pneumonia conditions.")
+st.write("Upload a chest X-ray to identify Normal, COVID-19, or Pneumonia.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -17,14 +17,11 @@ with col2:
 
 @st.cache_resource
 def load_trained_xray_model():
-    # ✅ Fix 3: Write to /tmp/ — writable on Streamlit Cloud
     model_path = '/tmp/best_model_final.keras'
 
     if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000000:
-        # ✅ Fix 2: Added ?download=true for direct HuggingFace download
         hf_url = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final.keras?download=true"
-
-        with st.spinner("Downloading model weights from Hugging Face... (first load only)"):
+        with st.spinner("Downloading model weights from Hugging Face..."):
             response = requests.get(hf_url, stream=True, timeout=120)
             if response.status_code == 200:
                 with open(model_path, 'wb') as f:
@@ -34,7 +31,8 @@ def load_trained_xray_model():
                 st.error(f"❌ Download failed. Status: {response.status_code}. Make sure your HuggingFace dataset is PUBLIC.")
                 st.stop()
 
-    return tf.keras.models.load_model(model_path, compile=False)
+    # ✅ Use keras.saving.load_model for Keras 3
+    return keras.saving.load_model(model_path, compile=False)
 
 with st.spinner("Warming up model..."):
     model = load_trained_xray_model()
@@ -43,19 +41,17 @@ uploaded_file = st.file_uploader("Upload Chest X-Ray (JPG, JPEG, PNG)", type=["j
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Loaded Input Specimen", use_container_width=True)
+    st.image(image, caption="Input Image", use_container_width=True)
 
     with st.spinner("Running inference..."):
         if image.mode != "RGB":
             image = image.convert("RGB")
 
         img_resized = image.resize((128, 128))
-        img_matrix = np.array(img_resized)
-        img_scaled = img_matrix / 255.0
-        input_tensor = np.expand_dims(img_scaled, axis=0)
+        img_array = np.array(img_resized) / 255.0
+        input_tensor = np.expand_dims(img_array, axis=0)
 
         raw_predictions = model.predict(input_tensor)
-
         target_labels = ['COVID-19', 'Normal', 'Pneumonia']
         winning_index = np.argmax(raw_predictions[0])
         final_prediction = target_labels[winning_index]
