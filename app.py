@@ -1,5 +1,6 @@
 import streamlit as st
 import keras
+from keras.applications.resnet50 import preprocess_input
 from PIL import Image
 import numpy as np
 import requests
@@ -47,7 +48,9 @@ if uploaded_file is not None:
             image = image.convert("RGB")
 
         img_resized = image.resize((128, 128))
-        img_array = np.array(img_resized) / 255.0
+        
+        # ✅ Correct ResNet50 preprocessing (NOT /255.0)
+        img_array = preprocess_input(np.array(img_resized, dtype=np.float32))
         input_tensor = np.expand_dims(img_array, axis=0)
 
         raw_predictions = model.predict(input_tensor)
