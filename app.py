@@ -2,7 +2,7 @@ import streamlit as st
 import tensorflow as tf
 from PIL import Image
 import numpy as np
-import urllib.request
+import requests
 import os
 
 # 1. Page Configuration & Title Dashboard
@@ -20,16 +20,24 @@ with col2:
 # 2. Download and Cache Model from Hugging Face
 @st.cache_resource
 def load_trained_xray_model():
-    # The name the model will be saved as locally on the Streamlit server
     model_path = 'best_model_final.keras'
     
-    # If the model isn't downloaded onto the server yet, grab it from Hugging Face
-    if not os.path.exists(model_path):
+    # Force a fresh download if the file is missing or corrupted/empty
+    if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000000:  # Must be larger than 1MB
         hf_url = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final.keras"
+        
         with st.spinner("Downloading model weights from Hugging Face Cloud storage... (This takes a moment on first load)"):
-            urllib.request.urlretrieve(hf_url, model_path)
-            
-    # FIX: Bypass strict layer structural checking rules in Keras v3 envs
+            # Using requests to cleanly stream the file down to the server
+            response = requests.get(hf_url, stream=True)
+            if response.status_code == 200:
+                with open(model_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            else:
+                st.error(f"Failed to download model from Hugging Face. Status Code: {response.status_code}")
+                st.stop()
+                
+    # Load model with safety configuration arguments
     return tf.keras.models.load_model(model_path, compile=False, safe_mode=False)
 
 with st.spinner("Warming up Keras inference layer..."):
