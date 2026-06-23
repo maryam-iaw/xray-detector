@@ -5,8 +5,10 @@ import requests
 import base64
 from openai import OpenAI
 from io import BytesIO
-import tensorflow as tf
-from tensorflow.keras.applications.resnet50 import preprocess_input as resnet_preprocess
+import os
+os.environ["KERAS_BACKEND"] = "jax"
+import keras
+from keras.applications.resnet50 import preprocess_input as resnet_preprocess
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Chest X-Ray AI", layout="wide")
@@ -25,7 +27,7 @@ def load_model():
     response = requests.get(url)
     with open("model.keras", "wb") as f:
         f.write(response.content)
-    return tf.keras.models.load_model("model.keras", compile=False)
+    return keras.saving.load_model("model.keras", compile=False)
 
 model = load_model()
 
@@ -41,9 +43,7 @@ def query_hf(image):
     img_array = np.expand_dims(img_array, axis=0)
     preds = model.predict(img_array)
     idx = np.argmax(preds[0])
-    label = CLASSES[idx]
-    confidence = f"{preds[0][idx]*100:.2f}%"
-    return label, confidence
+    return CLASSES[idx], f"{preds[0][idx]*100:.2f}%"
 
 # ---------------- OPENAI EXPLANATION ----------------
 def explain_result(label, confidence):
