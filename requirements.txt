@@ -1,6 +1,6 @@
 streamlit
+tensorflow
 pillow
-numpy
-matplotlib
-requests
 openai
+requests
+numpy
