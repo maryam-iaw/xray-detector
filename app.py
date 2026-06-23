@@ -146,6 +146,9 @@ def preprocess(image):
     return np.expand_dims(arr, axis=0)
 
 # ─── OPENAI EXPLANATION ────────────────────────────────────────
+from groq import Groq
+groq_client = Groq(api_key=st.secrets["OPENAI_API_KEY"])
+
 def explain_result(label, confidence):
     prompt = f"""
 A chest X-ray AI model predicted:
@@ -160,8 +163,8 @@ Explain in simple, empathetic medical terms covering:
 
 Keep it clear, human, and reassuring. No prescriptions.
 """
-    res = client.chat.completions.create(
-        model="gpt-4o-mini",
+    res = groq_client.chat.completions.create(
+        model="llama3-8b-8192",
         messages=[{"role": "user", "content": prompt}]
     )
     return res.choices[0].message.content
