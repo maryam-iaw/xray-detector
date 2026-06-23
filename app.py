@@ -1,76 +1,63 @@
 import streamlit as st
-import keras
-from keras.applications.resnet50 import preprocess_input
 from PIL import Image
-import numpy as np
-import requests
-import os
 
-st.set_page_config(page_title="X-Ray Classification Hub", layout="centered")
-st.title("🩻 Chest X-Ray Diagnostic Classifier")
-st.write("Upload a patient's chest X-ray image to identify Normal, COVID-19, or Pneumonia.")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(
+    page_title="Chest X-Ray AI System",
+    layout="wide"
+)
 
-col1, col2 = st.columns(2)
-with col1:
-    st.metric(label="Model Validation Accuracy", value="84.00%")
-with col2:
-    st.metric(label="Target Input Resolution", value="128x128 px")
+# ---------------- TITLE ----------------
+st.title("🫁 Chest X-Ray AI Diagnostic System")
+st.write("Upload a chest X-ray image to analyze using AI (Phase 1 UI only).")
 
-@st.cache_resource
-def load_trained_xray_model():
-    model_path = '/tmp/best_model_final_fixed.keras'
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("ℹ️ About This App")
 
-    if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000000:
-        hf_url = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final_fixed%20(1).keras"
-        with st.spinner("Downloading model from Hugging Face..."):
-            response = requests.get(hf_url, stream=True, timeout=120, headers={"User-Agent": "Mozilla/5.0"})
-            if response.status_code == 200:
-                with open(model_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-            else:
-                st.error(f"❌ Download failed. Status: {response.status_code}")
-                st.stop()
+st.sidebar.write("""
+This application is an AI-powered system for analyzing chest X-ray images.
 
-    return keras.saving.load_model(model_path, compile=False)
+⚠️ Disclaimer:
+This tool is for educational purposes only.
+It is NOT a medical diagnosis system.
+Always consult a medical professional.
+""")
 
-with st.spinner("Warming up model..."):
-    model = load_trained_xray_model()
+st.sidebar.divider()
 
-uploaded_file = st.file_uploader("Upload Chest X-Ray (JPG, JPEG, PNG)", type=["jpg", "jpeg", "png"])
+st.sidebar.subheader("How to Use")
+st.sidebar.write("""
+1. Upload a chest X-ray image  
+2. View image preview  
+3. AI prediction will appear in next phase  
+""")
 
+st.sidebar.divider()
+
+st.sidebar.subheader("Model Info")
+st.sidebar.write("Hugging Face Deep Learning Model (to be connected in Phase 2)")
+
+# ---------------- UPLOAD SECTION ----------------
+st.header("📤 Upload X-Ray Image")
+
+uploaded_file = st.file_uploader(
+    "Choose an image file",
+    type=["jpg", "jpeg", "png"]
+)
+
+# ---------------- IMAGE PREVIEW ----------------
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded X-Ray", use_container_width=True)
 
-    with st.spinner("Running inference..."):
-        if image.mode != "RGB":
-            image = image.convert("RGB")
+    st.subheader("🖼️ Uploaded Image")
+    st.image(image, use_container_width=True)
 
-        img_resized = image.resize((128, 128))
-        
-        # ✅ Correct ResNet50 preprocessing (NOT /255.0)
-        img_array = preprocess_input(np.array(img_resized, dtype=np.float32))
-        input_tensor = np.expand_dims(img_array, axis=0)
+# ---------------- PLACEHOLDER SECTIONS ----------------
+st.header("🧠 Prediction Result")
+st.info("Prediction will appear here after connecting AI model (Phase 2)")
 
-        raw_predictions = model.predict(input_tensor)
-        target_labels = ['COVID-19', 'Normal', 'Pneumonia']
-        winning_index = np.argmax(raw_predictions[0])
-        final_prediction = target_labels[winning_index]
-        confidence_metric = raw_predictions[0][winning_index] * 100
+st.header("🤖 AI Explanation")
+st.warning("AI explanation chatbot will be added in Phase 3")
 
-        st.write("---")
-        st.subheader("Classification Outcome")
-
-        if final_prediction == 'Normal':
-            st.success(f"Classification: **{final_prediction}**")
-        elif final_prediction == 'COVID-19':
-            st.error(f"Classification: **{final_prediction}**")
-        else:
-            st.warning(f"Classification: **{final_prediction}**")
-
-        st.metric(label="Inference Confidence", value=f"{confidence_metric:.2f}%")
-
-        with st.expander("Show class probability breakdown"):
-            for class_name, prob in zip(target_labels, raw_predictions[0]):
-                st.write(f"**{class_name}**: {prob * 100:.2f}%")
+st.header("🧾 Recommendations")
+st.success("Patient guidance and recommendations will appear here in Phase 3")
