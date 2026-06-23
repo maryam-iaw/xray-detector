@@ -1,8 +1,7 @@
-streamlit==1.32.0
-tensorflow-cpu==2.15.0
-pillow==10.2.0
-openai==1.12.0
-requests==2.31.0
-numpy==1.26.4
-h5py==3.10.0
-protobuf==3.20.3
+streamlit
+keras
+tf-keras
+pillow
+openai
+requests
+numpy
