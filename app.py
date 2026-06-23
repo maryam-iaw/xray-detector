@@ -446,11 +446,12 @@ with tab1:
                             'time':  datetime.datetime.now().strftime('%H:%M')
                         })
 
-                        # Generate explanations immediately so they're cached in state
+                        # Generate explanations FIRST
                         with st.spinner("Generating AI explanations..."):
                             explanation = explain_result(label, conf, language, patient_name, patient_age)
                             reasoning   = explain_prediction_reason(label)
 
+                        # THEN save to session state
                         st.session_state.result = {
                             'label':       label,
                             'conf':        conf,
@@ -460,9 +461,17 @@ with tab1:
                             'reasoning':   reasoning,
                             'language':    language,
                         }
+
                     except Exception as e:
                         st.error(f"Analysis error: {e}")
                         st.session_state.result = None
+
+            # AI Medical Explanation on LEFT — OUTSIDE the button block, AFTER session state is set
+            if st.session_state.result is not None:
+                res = st.session_state.result
+                st.markdown(f'<div class="card"><h3>💬 AI Medical Explanation ({res["language"]})</h3>', unsafe_allow_html=True)
+                st.markdown(f'<div class="explanation-box">{res["explanation"].replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
     # ── RIGHT: all results in order ──
     with right:
@@ -537,11 +546,6 @@ with tab1:
             # 7. Why did AI predict this?
             st.markdown('<div class="card"><h3>🤖 Why Did The AI Predict This?</h3>', unsafe_allow_html=True)
             st.markdown(f'<div class="explanation-box">{reasoning.replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            # 8. Medical explanation in chosen language
-            st.markdown(f'<div class="card"><h3>💬 AI Medical Explanation ({language})</h3>', unsafe_allow_html=True)
-            st.markdown(f'<div class="explanation-box">{explanation.replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
             # 9. PDF download
