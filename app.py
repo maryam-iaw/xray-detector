@@ -1,196 +1,88 @@
 import streamlit as st
 from PIL import Image
 import numpy as np
-import tensorflow as tf
 import requests
-from io import BytesIO
-import matplotlib.pyplot as plt
+import base64
 from openai import OpenAI
+from io import BytesIO
+import tensorflow as tf
+from tensorflow.keras.applications.resnet50 import preprocess_input as resnet_preprocess
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(
-    page_title="Chest X-Ray AI System",
-    page_icon="🫁",
-    layout="wide"
-)
+# ---------------- CONFIG ----------------
+st.set_page_config(page_title="Chest X-Ray AI", layout="wide")
 
-# ---------------- THEME ----------------
-st.markdown("""
-<style>
-.main { background-color: #0b1220; color: white; }
-h1, h2, h3 { color: #38bdf8; }
+# ---------------- KEYS ----------------
+HF_API_KEY = st.secrets["HF_API_KEY"]
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-.stButton > button {
-    background-color: #2563eb;
-    color: white;
-    border-radius: 10px;
-    padding: 10px;
-}
+CLASSES = ['covid', 'normal', 'pneumonia']
 
-.stButton > button:hover {
-    background-color: #1d4ed8;
-}
-
-[data-testid="stSidebar"] {
-    background-color: #0f172a;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------- OPENAI CLIENT ----------------
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# ---------------- MODEL ----------------
-MODEL_URL = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final_fixed%20(1).keras"
-
+# ---------------- LOAD MODEL ----------------
 @st.cache_resource
 def load_model():
-    response = requests.get(MODEL_URL)
-    model_file = BytesIO(response.content)
-    return tf.keras.models.load_model(model_file)
+    url = "https://huggingface.co/datasets/yamram/xray-model/resolve/main/best_model_final_fixed%20(1).keras"
+    response = requests.get(url)
+    with open("model.keras", "wb") as f:
+        f.write(response.content)
+    return tf.keras.models.load_model("model.keras", compile=False)
 
 model = load_model()
 
-# ---------------- LABELS ----------------
-CLASS_NAMES = ["Normal", "Pneumonia"]
+# ---------------- UI ----------------
+st.title("🫁 Chest X-Ray AI System")
+uploaded_file = st.file_uploader("Upload X-ray", type=["jpg", "png", "jpeg"])
 
-# ---------------- PREPROCESS ----------------
-def preprocess(image):
-    img = image.resize((224, 224))
-    img = np.array(img)
-
-    if len(img.shape) == 2:
-        img = np.stack((img,) * 3, axis=-1)
-
-    if img.shape[-1] == 4:
-        img = img[:, :, :3]
-
-    img = img / 255.0
-    img = np.expand_dims(img, axis=0)
-
-    return img
+# ---------------- HF PREDICTION ----------------
+def query_hf(image):
+    image = image.resize((224, 224)).convert("RGB")
+    img_array = np.array(image).astype(np.float32)
+    img_array = resnet_preprocess(img_array)
+    img_array = np.expand_dims(img_array, axis=0)
+    preds = model.predict(img_array)
+    idx = np.argmax(preds[0])
+    label = CLASSES[idx]
+    confidence = f"{preds[0][idx]*100:.2f}%"
+    return label, confidence
 
 # ---------------- OPENAI EXPLANATION ----------------
-def get_ai_explanation(label, confidence):
+def explain_result(label, confidence):
     prompt = f"""
-You are a medical AI assistant.
-
-A chest X-ray model predicted:
-- Diagnosis: {label}
-- Confidence: {confidence:.2f}%
-
-Give:
-1. Simple explanation
-2. Medical interpretation (non-diagnostic)
-3. Possible next steps for patient
-4. No prescriptions, keep safe language
+A chest X-ray AI model predicted:
+- Result: {label}
+- Confidence: {confidence}
+Explain in simple medical terms:
+1. Meaning of result
+2. Possible interpretation
+3. What patient should do next
+4. No prescriptions
 """
-
-    response = client.chat.completions.create(
+    res = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a careful medical explanation assistant."},
-            {"role": "user", "content": prompt}
-        ]
+        messages=[{"role": "user", "content": prompt}]
     )
+    return res.choices[0].message.content
 
-    return response.choices[0].message.content
+# ---------------- MAIN ----------------
+if uploaded_file:
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Uploaded X-ray")
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.title("🫁 Chest X-Ray AI")
-page = st.sidebar.radio("Navigation", ["🏠 Home", "🤖 AI Doctor", "ℹ️ Info"])
+    if st.button("Analyze"):
+        with st.spinner("Analyzing with AI..."):
+            try:
+                label, confidence = query_hf(image)
+                st.success(f"Prediction: **{label.upper()}** — Confidence: **{confidence}**")
+            except Exception as e:
+                st.error(f"Model error: {e}")
+                label = "Unknown"
+                confidence = "N/A"
 
-st.sidebar.caption("⚠️ Educational tool only")
-
-# ---------------- INFO PAGE ----------------
-if page == "ℹ️ Info":
-    st.title("ℹ️ System Info")
-    st.write("Deep learning + OpenAI-powered medical explanation system.")
-    st.code(MODEL_URL)
-
-# ---------------- AI DOCTOR PAGE ----------------
-elif page == "🤖 AI Doctor":
-    st.title("🤖 AI Medical Assistant")
-    st.write("Ask general questions about chest X-rays")
-
-    q = st.text_input("Ask a question")
-
-    if q:
-        with st.spinner("Thinking..."):
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "You are a helpful medical education assistant."},
-                    {"role": "user", "content": q}
-                ]
-            )
-
-        st.success(response.choices[0].message.content)
-
-# ---------------- MAIN APP ----------------
-else:
-
-    st.title("🫁 Chest X-Ray AI Diagnostic System")
-    st.caption("AI-powered medical imaging analysis system")
-
-    uploaded_file = st.file_uploader("Upload Chest X-Ray", type=["jpg", "jpeg", "png"])
-
-    if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, use_container_width=True)
-
-        if st.button("🔍 Analyze X-Ray", use_container_width=True):
-
-            with st.spinner("Analyzing with AI model..."):
-                processed = preprocess(image)
-                prediction = model.predict(processed)
-
-                predicted_class = np.argmax(prediction)
-                confidence = float(np.max(prediction) * 100)
-                label = CLASS_NAMES[predicted_class]
-
-            st.markdown("---")
-
-            # ---------------- RESULT ----------------
-            st.subheader("🧾 Diagnosis Result")
-
-            if label == "Normal":
-                st.success(f"Result: {label}")
-            else:
-                st.error(f"Result: {label}")
-
-            st.metric("Confidence", f"{confidence:.2f}%")
-
-            # ---------------- CHART ----------------
-            st.subheader("📊 Confidence Breakdown")
-
-            fig, ax = plt.subplots()
-            ax.bar(CLASS_NAMES, prediction[0])
-            ax.set_ylim([0, 1])
-            st.pyplot(fig)
-
-            # ---------------- OPENAI EXPLANATION ----------------
-            st.subheader("🤖 AI Explanation (OpenAI)")
-
+        if label != "Unknown":
             with st.spinner("Generating medical explanation..."):
-                explanation = get_ai_explanation(label, confidence)
-
-            st.info(explanation)
-
-            # ---------------- REPORT ----------------
-            st.subheader("📄 Download Report")
-
-            report = f"""
-Chest X-Ray AI Report
-
-Diagnosis: {label}
-Confidence: {confidence:.2f}%
-
-Disclaimer: Educational use only, not medical diagnosis.
-"""
-
-            st.download_button(
-                "Download Report",
-                report,
-                file_name="xray_report.txt"
-            )
+                try:
+                    explanation = explain_result(label, confidence)
+                    st.subheader("🤖 AI Explanation")
+                    st.write(explanation)
+                except Exception as e:
+                    st.error(f"Explanation error: {e}")
