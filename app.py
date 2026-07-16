@@ -196,26 +196,67 @@ def get_key_findings(label, preds):
     return findings[label]
 
 def explain_result(label, confidence, language, patient_name, patient_age):
-    patient_info = f"Patient: {patient_name}, Age: {patient_age}" if patient_name else ""
+    patient_info = ""
+    if patient_name:
+        patient_info = f"Patient Name: {patient_name}\nAge: {patient_age}\n\n"
+
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{
-            "role": "user",
-            "content": (
-                f"{patient_info}\n\n"
-                f"Chest X-ray AI classification result:\n"
-                f"Class: {label}\nConfidence: {confidence}\n\n"
-                f"Explain in {language}:\n"
-                "1. What this classification means\n"
-                "2. General information about this condition\n"
-                "3. Questions the patient may discuss with a healthcare professional\n"
-                "4. State clearly this is NOT a diagnosis\n"
-                "5. Do NOT prescribe treatments or medications\n"
-                "6. Use compassionate and easy-to-understand language"
-            )
-        }]
+        messages=[
+            {
+                "role": "user",
+                "content": f"""
+{patient_info}
+
+The AI model predicted the following chest X-ray result:
+
+Condition: {label}
+Confidence: {confidence}
+
+Please explain this result in {language}.
+
+Instructions:
+- Write in plain text only.
+- Do NOT use Markdown.
+- Do NOT use **, ##, *, -, or bullet symbols.
+- Do NOT make any text bold or italic.
+- Use simple English that anyone can understand.
+- Keep the explanation friendly and professional.
+
+Use exactly this format:
+
+Understanding Your Chest X-ray AI Classification Result
+
+1. What this classification means:
+Explain what this prediction means in simple words.
+
+2. About this condition:
+Give a short description of the condition.
+
+3. Questions to ask your doctor:
+Suggest a few questions the patient may discuss with a healthcare professional.
+
+4. Important note:
+Clearly mention that this AI result is not a final medical diagnosis and that a qualified doctor should confirm it.
+
+Do not recommend medicines or treatment.
+"""
+            }
+        ]
     )
-    return response.choices[0].message.content
+
+    explanation = response.choices[0].message.content
+
+    # Remove any markdown symbols if the AI still returns them
+    explanation = (
+        explanation.replace("**", "")
+                   .replace("###", "")
+                   .replace("##", "")
+                   .replace("* ", "")
+                   .replace("`", "")
+    )
+
+    return explanation
 
 def explain_prediction_reason(label):
     response = groq_client.chat.completions.create(
